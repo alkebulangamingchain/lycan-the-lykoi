@@ -1,32 +1,35 @@
-name: Decode binary assets
+name: Unpack assets and publish
 on:
   push:
     branches: [main]
-    paths: ['_b64/**', '.github/workflows/decode-assets.yml']
   workflow_dispatch:
 permissions:
   contents: write
 concurrency:
-  group: decode-assets
+  group: publish-site
   cancel-in-progress: false
 jobs:
-  decode:
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Unpack _b64 bundle into the site
+        with:
+          fetch-depth: 0
+      - name: Unpack _b64 bundle (if any) into the site
         run: |
           set -euo pipefail
-          ls _b64/bundle.tgz.b64.part* >/dev/null 2>&1 || { echo "nothing to decode"; exit 0; }
-          cat _b64/bundle.tgz.b64.part* | base64 -d > /tmp/bundle.tgz
-          sha256sum /tmp/bundle.tgz
-          tar -xzvf /tmp/bundle.tgz
-          git rm -rq _b64
-      - name: Commit decoded files
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898099+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --quiet && exit 0
-          git commit -m "Unpack binary site assets (images, fonts, videos, icons)"
-          git push
+          if ls _b64/bundle.tgz.b64.part* >/dev/null 2>&1; then
+            cat _b64/bundle.tgz.b64.part* | base64 -d > /tmp/bundle.tgz
+            sha256sum /tmp/bundle.tgz
+            tar -xzvf /tmp/bundle.tgz
+            git rm -rq _b64
+            git add -A
+            git commit -m "Unpack binary site assets"
+            git push origin HEAD:main
+          else
+            echo "nothing to unpack"
+          fi
+      - name: Publish main to gh-pages (GitHub Pages source)
+        run: git push origin HEAD:refs/heads/gh-pages
